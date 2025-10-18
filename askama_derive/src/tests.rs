@@ -14,7 +14,7 @@ use crate::integration::Buffer;
 use crate::{AnyTemplateArgs, derive_template};
 
 #[track_caller]
-fn build_template(ast: &syn::DeriveInput) -> Result<TokenStream, crate::CompileError> {
+fn build_template(ast: &mut syn::DeriveInput) -> Result<TokenStream, crate::CompileError> {
     let mut buf = Buffer::new();
     let args = AnyTemplateArgs::new(ast)?;
     crate::build_template(&mut buf, ast, args)?;
@@ -162,7 +162,7 @@ struct Foo {{ {} }}"##,
     );
 
     let generated = build_template(
-        &syn::parse_str::<syn::DeriveInput>(&jinja).expect("`syn` failed to parse code"),
+        &mut syn::parse_str::<syn::DeriveInput>(&jinja).expect("`syn` failed to parse code"),
     )
     .expect("`build_template` failed");
     match syn::parse2(generated.clone()) {
@@ -829,8 +829,8 @@ fn test_code_in_comment() {
         /// ```
         struct Tmpl;
     "#;
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(generated.contains("Hello world!"));
     assert!(!generated.contains("compile_error"));
 
@@ -842,8 +842,8 @@ fn test_code_in_comment() {
         /// ```
         struct Tmpl;
     "#;
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(generated.contains("Hello\nworld!"));
     assert!(!generated.contains("compile_error"));
 
@@ -855,8 +855,8 @@ fn test_code_in_comment() {
         /// ```
         struct Tmpl;
     "#;
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(generated.contains("Hello\nworld!"));
     assert!(!generated.contains("compile_error"));
 
@@ -872,8 +872,8 @@ fn test_code_in_comment() {
         /// Some more text.
         struct Tmpl;
     "#;
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(generated.contains("Hello\nworld!"));
     assert!(!generated.contains("compile_error"));
 
@@ -882,8 +882,8 @@ fn test_code_in_comment() {
         #[doc = \"```askama\nHello\nworld!\n```\"]
         struct Tmpl;
     ";
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(generated.contains("Hello\nworld!"));
     assert!(!generated.contains("compile_error"));
 
@@ -896,8 +896,8 @@ fn test_code_in_comment() {
         /// `````
         struct BlockOnBlock;
     ";
-    let ast = syn::parse_str(ts).unwrap();
-    let err = build_template(&ast).unwrap_err();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let err = build_template(&mut ast).unwrap_err();
     assert_eq!(
         err.to_string(),
         "when using `in_doc` with the value `true`, the struct's documentation needs a `askama` \
@@ -913,8 +913,8 @@ fn test_code_in_comment() {
         /// ```
         struct BlockOnBlock;
     ";
-    let ast = syn::parse_str(ts).unwrap();
-    let generated = build_template(&ast).unwrap().to_string();
+    let mut ast = syn::parse_str(ts).unwrap();
+    let generated = build_template(&mut ast).unwrap().to_string();
     assert!(!generated.contains("compile_error"));
 }
 
@@ -1521,28 +1521,28 @@ fn regression_tests_span_change() {
         11,
     );
 
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = "{{ \"x\" | ΔxΔyΔ }}", ext = "txt")]
         struct Foo;
     });
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = r"{{ "x" | ΔxΔyΔ }}", ext = "txt")]
         struct Foo;
     });
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = r#"{{ "x" | ΔxΔyΔ }}"#, ext = "txt")]
         struct Foo;
     });
 
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = "{{ \"ΔxΔyΔ\" | x }}", ext = "txt")]
         struct Foo;
     });
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = r"{{ "ΔxΔyΔ" | x }}", ext = "txt")]
         struct Foo;
     });
-    let _ = build_template(&parse_quote! {
+    let _ = build_template(&mut parse_quote! {
         #[template(source = r#"{{ "ΔxΔyΔ" | x }}"#, ext = "txt")]
         struct Foo;
     });

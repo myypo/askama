@@ -39,3 +39,5 @@ urlencode = ["askama_derive/urlencode"]
 
 # Unused, but we want to have the same features as `askama`.
 derive = []
+
+nocrabstar = []

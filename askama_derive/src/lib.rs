@@ -236,7 +236,7 @@ macro_rules! make_derive_template {
 }
 
 pub fn derive_template(input: TokenStream, import_askama: fn() -> TokenStream) -> TokenStream {
-    let ast = match syn::parse2(input) {
+    let mut ast = match syn::parse2(input) {
         Ok(ast) => ast,
         Err(err) => {
             let msgs = err.into_iter().map(|err| err.to_string());
@@ -257,8 +257,8 @@ pub fn derive_template(input: TokenStream, import_askama: fn() -> TokenStream) -
         .map(|a| a.take_crate_name())
         .unwrap_or_default();
 
-    let ts = match args.and_then(|args| build_template(&mut buf, &ast, args)) {
-        Ok(_) => buf.into_token_stream(),
+    let (ts, crabstar_ts) = match args.and_then(|args| build_template(&mut buf, &mut ast, args)) {
+        Ok((crabstar_ts, _)) => (buf.into_token_stream(), crabstar_ts),
         Err(CompileError { msg, span }) => {
             let mut ts = quote::quote_spanned! {
                 span.unwrap_or(ast.ident.span()) =>
@@ -269,7 +269,7 @@ pub fn derive_template(input: TokenStream, import_askama: fn() -> TokenStream) -
                 let source: TokenStream = buf.into_token_stream();
                 ts.extend(source);
             }
-            ts
+            (ts, quote! {})
         }
     };
     let import_askama = match crate_name {
@@ -298,6 +298,7 @@ pub fn derive_template(input: TokenStream, import_askama: fn() -> TokenStream) -
             #import_askama
             #ts
         };
+        #crabstar_ts
     }
 }
 
@@ -320,12 +321,16 @@ fn build_skeleton(buf: &mut Buffer, ast: &syn::DeriveInput) -> Result<usize, Com
 /// value as passed to the `template()` attribute.
 pub(crate) fn build_template(
     buf: &mut Buffer,
-    ast: &syn::DeriveInput,
+    ast: &mut syn::DeriveInput,
     args: AnyTemplateArgs,
-) -> Result<usize, CompileError> {
+) -> Result<(TokenStream, usize), CompileError> {
+    let mut crabstar_tokens = quote! {};
+
     let err_span;
     let mut result = match args {
         AnyTemplateArgs::Struct(item) => {
+            crabstar_tokens =
+                crate::crabstar::crabstar_derive(ast, &item.crabstar, &item.source.0)?;
             err_span = Some(item.source.1.config_span());
             build_template_item(buf, ast, None, &item, TmplKind::Struct)
         }
@@ -347,7 +352,7 @@ pub(crate) fn build_template(
     {
         err.span = err_span;
     }
-    result
+    result.map(|hint| (crabstar_tokens, hint))
 }
 
 #[derive(Default)]
@@ -389,7 +394,7 @@ fn build_template_item(
     let input = TemplateInput::new(ast, enum_ast, config, template_args)?;
 
     let mut templates = HashMap::default();
-    input.find_used_templates(&mut templates)?;
+    input.find_used_templates(&mut templates, &template_args.crabstar)?;
 
     let mut contexts = HashMap::default();
     let mut called_blocks = CalledBlocks::default();
@@ -773,3 +778,5 @@ macro_rules! quote_into {
 pub(crate) use {fmt_left, fmt_right, quote_into};
 
 type HashMap<K, V> = std::collections::hash_map::HashMap<K, V, FxBuildHasher>;
+
+mod crabstar;

@@ -67,3 +67,5 @@ std = [
     "percent-encoding?/std",
 ]
 urlencode = ["askama_macros?/urlencode", "dep:percent-encoding"]
+
+nocrabstar = ["askama_macros?/nocrabstar"]

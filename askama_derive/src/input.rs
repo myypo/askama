@@ -154,12 +154,14 @@ impl TemplateInput<'_> {
     pub(crate) fn find_used_templates(
         &self,
         map: &mut HashMap<Arc<Path>, Arc<Parsed>>,
+
+        crabstar: &crate::crabstar::CrabstarArgs,
     ) -> Result<(), CompileError> {
         let (source, source_path) = match &self.source {
             Source::Source(s) => (s.clone(), None),
             #[cfg(feature = "external-sources")]
             Source::Path(_) => (
-                get_template_source(&self.path, None)?,
+                get_template_source(&self.path, None, crabstar)?,
                 Some(Arc::clone(&self.path)),
             ),
         };
@@ -203,6 +205,7 @@ impl TemplateInput<'_> {
                                     source,
                                     n.span().as_suffix_of(source).unwrap_or_default(),
                                 )),
+                                crabstar,
                             )?;
                             check.push((new_path.clone(), source, Some(new_path.clone())));
                         }
@@ -432,6 +435,8 @@ pub(crate) struct TemplateArgs {
     crate_name: Option<ExprPath>,
     pub(crate) whitespace: Option<Whitespace>,
     pub(crate) config_span: Option<Span>,
+
+    pub(crate) crabstar: crate::crabstar::CrabstarArgs,
 }
 
 impl TemplateArgs {
@@ -495,6 +500,8 @@ impl TemplateArgs {
             crate_name: args.crate_name,
             whitespace: args.whitespace,
             config_span: args.config.as_ref().map(|value| value.span()),
+
+            crabstar: args.crabstar.unwrap_or_default(),
         })
     }
 
@@ -514,6 +521,8 @@ impl TemplateArgs {
             crate_name: None,
             whitespace: None,
             config_span: None,
+
+            crabstar: crate::crabstar::CrabstarArgs::default(),
         }
     }
 
@@ -679,18 +688,13 @@ pub(crate) enum Source {
     Source(Arc<str>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Default)]
 pub(crate) enum Print {
     All,
     Ast,
     Code,
+    #[default]
     None,
-}
-
-impl Default for Print {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl FromStr for Print {
@@ -725,6 +729,8 @@ fn cyclic_graph_error(dependency_graph: &[(Arc<Path>, Arc<Path>)]) -> Result<(),
 pub(crate) fn get_template_source(
     tpl_path: &Arc<Path>,
     import_from: Option<(&Arc<Path>, &str, &str)>,
+
+    crabstar: &crate::crabstar::CrabstarArgs,
 ) -> Result<Arc<str>, CompileError> {
     static CACHE: std::sync::OnceLock<crate::OnceMap<Arc<Path>, Arc<str>>> =
         std::sync::OnceLock::new();
@@ -738,6 +744,7 @@ pub(crate) fn get_template_source(
                     if source.ends_with('\n') {
                         let _ = source.pop();
                     }
+                    crate::crabstar::inject_scripts(crabstar, &mut source, import_from)?;
                     Ok((Arc::clone(tpl_path), Arc::from(source)))
                 }
                 Err(err) => Err(CompileError::new(
@@ -767,6 +774,8 @@ pub(crate) struct PartialTemplateArgs {
     pub(crate) crate_name: Option<ExprPath>,
     #[cfg(feature = "blocks")]
     pub(crate) blocks: Option<Vec<LitStr>>,
+
+    pub(crate) crabstar: Option<crate::crabstar::CrabstarArgs>,
 }
 
 #[derive(Clone)]
@@ -833,6 +842,8 @@ const _: () = {
             crate_name: None,
             #[cfg(feature = "blocks")]
             blocks: None,
+
+            crabstar: None,
         };
         let mut has_data = false;
 
@@ -843,6 +854,14 @@ const _: () = {
             if ident == "template" {
                 this.template_span = ident.span();
                 has_data = true;
+            } else if ident == "suspense" {
+                let crabstar = this.crabstar.get_or_insert_default();
+                crabstar.suspense.push(attr.try_into()?);
+                continue;
+            } else if ident == "page" {
+                let crabstar = this.crabstar.get_or_insert_default();
+                crabstar.page = Some(attr.try_into()?);
+                continue;
             } else {
                 #[cfg(feature = "code-in-doc")]
                 if ident == "doc" {
@@ -1123,5 +1142,8 @@ fn get_source() {
     let path = Config::new("", None, None, None, None)
         .and_then(|config| config.find_template("b.html", None, None, None))
         .unwrap();
-    assert_eq!(get_template_source(&path, None).unwrap(), "bar".into());
+    assert_eq!(
+        get_template_source(&path, None, &crate::crabstar::CrabstarArgs::default()).unwrap(),
+        "bar".into()
+    );
 }
