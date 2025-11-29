@@ -155,7 +155,7 @@ impl TemplateInput<'_> {
         &self,
         map: &mut HashMap<Arc<Path>, Arc<Parsed>>,
 
-        crabstar: &crate::crabstar::CrabstarArgs,
+        crabstar: &crabstar_macros::CrabstarArgs,
     ) -> Result<(), CompileError> {
         let (source, source_path) = match &self.source {
             Source::Source(s) => (s.clone(), None),
@@ -436,7 +436,7 @@ pub(crate) struct TemplateArgs {
     pub(crate) whitespace: Option<Whitespace>,
     pub(crate) config_span: Option<Span>,
 
-    pub(crate) crabstar: crate::crabstar::CrabstarArgs,
+    pub(crate) crabstar: crabstar_macros::CrabstarArgs,
 }
 
 impl TemplateArgs {
@@ -522,7 +522,7 @@ impl TemplateArgs {
             whitespace: None,
             config_span: None,
 
-            crabstar: crate::crabstar::CrabstarArgs::default(),
+            crabstar: crabstar_macros::CrabstarArgs::default(),
         }
     }
 
@@ -730,7 +730,7 @@ pub(crate) fn get_template_source(
     tpl_path: &Arc<Path>,
     import_from: Option<(&Arc<Path>, &str, &str)>,
 
-    crabstar: &crate::crabstar::CrabstarArgs,
+    crabstar: &crabstar_macros::CrabstarArgs,
 ) -> Result<Arc<str>, CompileError> {
     static CACHE: std::sync::OnceLock<crate::OnceMap<Arc<Path>, Arc<str>>> =
         std::sync::OnceLock::new();
@@ -744,7 +744,7 @@ pub(crate) fn get_template_source(
                     if source.ends_with('\n') {
                         let _ = source.pop();
                     }
-                    crate::crabstar::inject_scripts(crabstar, &mut source, import_from)?;
+                    crabstar_macros::inject_scripts(crabstar, &mut source);
                     Ok((Arc::clone(tpl_path), Arc::from(source)))
                 }
                 Err(err) => Err(CompileError::new(
@@ -775,7 +775,7 @@ pub(crate) struct PartialTemplateArgs {
     #[cfg(feature = "blocks")]
     pub(crate) blocks: Option<Vec<LitStr>>,
 
-    pub(crate) crabstar: Option<crate::crabstar::CrabstarArgs>,
+    pub(crate) crabstar: Option<crabstar_macros::CrabstarArgs>,
 }
 
 #[derive(Clone)]
@@ -856,11 +856,17 @@ const _: () = {
                 has_data = true;
             } else if ident == "suspense" {
                 let crabstar = this.crabstar.get_or_insert_default();
-                crabstar.suspense.push(attr.try_into()?);
+                match crabstar_macros::CrabstarSuspenseArgs::try_from(attr) {
+                    Ok(v) => crabstar.suspense.push(v),
+                    Err(e) => return Err(CompileError::no_file_info(e.msg, e.span)),
+                }
                 continue;
             } else if ident == "page" {
                 let crabstar = this.crabstar.get_or_insert_default();
-                crabstar.page = Some(attr.try_into()?);
+                match crabstar_macros::CrabstarPageArgs::try_from(attr) {
+                    Ok(v) => crabstar.page = Some(v),
+                    Err(e) => return Err(CompileError::no_file_info(e.msg, e.span)),
+                }
                 continue;
             } else {
                 #[cfg(feature = "code-in-doc")]
@@ -1143,7 +1149,7 @@ fn get_source() {
         .and_then(|config| config.find_template("b.html", None, None, None))
         .unwrap();
     assert_eq!(
-        get_template_source(&path, None, &crate::crabstar::CrabstarArgs::default()).unwrap(),
+        get_template_source(&path, None, &crabstar_macros::CrabstarArgs::default()).unwrap(),
         "bar".into()
     );
 }

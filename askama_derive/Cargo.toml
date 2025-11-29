@@ -32,6 +32,8 @@ quote = { version = "1", default-features = false }
 rustc-hash = "2.0.0"
 syn = { version = "2.0.3", default-features = false, features = ["clone-impls", "derive", "parsing", "printing"] }
 
+crabstar_macros = { path = "../../crabstar_macros" }
+
 [dev-dependencies]
 console = "0.16.0"
 criterion = "0.7"

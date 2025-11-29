@@ -44,7 +44,7 @@ use syn::spanned::Spanned;
 use crate::config::{Config, read_config_file};
 use crate::generator::{TmplKind, template_to_string};
 use crate::heritage::{Context, Heritage};
-use crate::input::{AnyTemplateArgs, Print, TemplateArgs, TemplateInput};
+use crate::input::{AnyTemplateArgs, Print, Source, TemplateArgs, TemplateInput};
 use crate::integration::{Buffer, build_template_enum};
 
 /// [`true`] if and only if [`crate`] is compiled with feature `"external-sources"`.
@@ -329,8 +329,13 @@ pub(crate) fn build_template(
     let err_span;
     let mut result = match args {
         AnyTemplateArgs::Struct(item) => {
+            let crabstar_source = match &item.source.0 {
+                Source::Path(p) => crabstar_macros::Source::Path(p.clone()),
+                Source::Source(s) => crabstar_macros::Source::Source(s.clone()),
+            };
             crabstar_tokens =
-                crate::crabstar::crabstar_derive(ast, &item.crabstar, &item.source.0)?;
+                crabstar_macros::crabstar_derive(ast, &item.crabstar, &crabstar_source)
+                    .map_err(|e| CompileError::no_file_info(e.msg, e.span))?;
             err_span = Some(item.source.1.config_span());
             build_template_item(buf, ast, None, &item, TmplKind::Struct)
         }
@@ -778,5 +783,3 @@ macro_rules! quote_into {
 pub(crate) use {fmt_left, fmt_right, quote_into};
 
 type HashMap<K, V> = std::collections::hash_map::HashMap<K, V, FxBuildHasher>;
-
-mod crabstar;
